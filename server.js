@@ -331,4 +331,4 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(s, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: s === 500 ? 'Lỗi máy chủ.' : e.message }));
   }
 });
-server.listen(PORT, () => console.log(`Glow Base chạy tại http://localhost:${PORT}  (dữ liệu: ${DATA})`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Glow Base running on port ${PORT}`));
