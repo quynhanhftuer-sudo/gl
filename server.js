@@ -51,16 +51,29 @@ setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x =>
 // ---- gửi email ----
 let mailer = null;
 if (E.SMTP_USER && E.SMTP_PASS) {
-  try { mailer = require('nodemailer').createTransport({ host: E.SMTP_HOST || 'smtp.gmail.com', port: +E.SMTP_PORT || 465, secure: (+E.SMTP_PORT || 465) === 465, auth: { user: E.SMTP_USER, pass: E.SMTP_PASS } }); }
-  catch { console.error('Thiếu gói nodemailer — hãy chạy: npm install'); process.exit(1); }
-} else if (PROD) { console.error('Chế độ production cần SMTP_USER và SMTP_PASS để gửi mã xác minh.'); process.exit(1); }
-else console.warn('[dev] Chưa cấu hình SMTP: mã xác minh chỉ được in ra console server, KHÔNG gửi email thật.');
-async function sendCode(to, code) {
-  if (!mailer) { console.log(`[dev] Mã xác minh cho ${to}: ${code}`); return; }
-  try {
-    await mailer.sendMail({ from: E.SMTP_FROM || `"Glow Base" <${E.SMTP_USER}>`, to, subject: `Mã xác minh Glow Base: ${code}`,
-      text: `Mã xác minh Glow Base của bạn là ${code}\nCó hiệu lực trong 5 phút. Không chia sẻ mã này cho bất kỳ ai.\nNếu bạn không đăng ký, hãy bỏ qua email này.` });
-  } catch (e) { console.error('Gửi mail lỗi:', e.message); throw bad('Chưa gửi được email xác minh, vui lòng thử lại sau.', 502); }
+  try { 
+    mailer = require('nodemailer').createTransport({ 
+      host: E.SMTP_HOST || 'smtp.gmail.com', 
+      port: +E.SMTP_PORT || 587,             // Đổi cổng mặc định sang 587
+      secure: false,                          // Dùng STARTTLS (bắt buộc false với cổng 587)
+      auth: { 
+        user: E.SMTP_USER, 
+        pass: E.SMTP_PASS 
+      },
+      tls: {
+        rejectUnauthorized: false             // Tránh lỗi chứng chỉ SSL/TLS trên cloud
+      }
+    }); 
+  }
+  catch (e) { 
+    console.error('Thiếu gói nodemailer — hãy chạy: npm install nodemailer'); 
+    process.exit(1); 
+  }
+} else if (PROD) { 
+  console.error('Chế độ production cần SMTP_USER và SMTP_PASS để gửi mã xác minh.'); 
+  process.exit(1); 
+} else {
+  console.warn('[dev] Chưa cấu hình SMTP: mã xác minh chỉ được in ra console server, KHÔNG gửi email thật.');
 }
 
 // ---- làm sạch dữ liệu (chống XSS: giao diện render HTML thô nên server phải escape) ----
