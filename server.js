@@ -48,32 +48,34 @@ const over = (k, max, win) => (hits.get(k) || []).filter(x => now() - x < win).l
 const hit = k => { const a = (hits.get(k) || []).filter(x => now() - x < 3600e3); a.push(now()); hits.set(k, a); };
 setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); q('DELETE FROM sessions WHERE exp<? OR (max_exp IS NOT NULL AND max_exp<?)').run(t, t); q('DELETE FROM pending WHERE exp<?').run(t - 3600e3); }, 600e3).unref();
 
-// ---- gửi email ----
-let mailer = null;
-if (E.SMTP_USER && E.SMTP_PASS) {
-  try { 
-    mailer = require('nodemailer').createTransport({ 
-      host: E.SMTP_HOST || 'smtp.gmail.com', 
-      port: +E.SMTP_PORT || 587,             // Đổi cổng mặc định sang 587
-      secure: false,                          // Dùng STARTTLS (bắt buộc false với cổng 587)
-      auth: { 
-        user: E.SMTP_USER, 
-        pass: E.SMTP_PASS 
-      },
-      tls: {
-        rejectUnauthorized: false             // Tránh lỗi chứng chỉ SSL/TLS trên cloud
-      }
-    }); 
+// ---- gửi email bằng Resend API ----
+const { Resend } = require('resend');
+const resend = E.RESEND_API_KEY ? new Resend(E.RESEND_API_KEY) : null;
+
+if (!resend && PROD) {
+  console.error('Chế độ production cần RESEND_API_KEY để gửi mã xác minh.');
+  process.exit(1);
+} else if (!resend) {
+  console.warn('[dev] Chưa có RESEND_API_KEY: Mã xác minh chỉ được in ra console server.');
+}
+
+async function sendCode(to, code) {
+  if (!resend) {
+    console.log(`[dev] Mã xác minh cho ${to}: ${code}`);
+    return;
   }
-  catch (e) { 
-    console.error('Thiếu gói nodemailer — hãy chạy: npm install nodemailer'); 
-    process.exit(1); 
+  try {
+    const { error } = await resend.emails.send({
+      from: 'Glow Base <onboarding@resend.dev>',
+      to: [to],
+      subject: `Mã xác minh Glow Base: ${code}`,
+      html: `<p>Mã xác minh Glow Base của bạn là: <strong>${code}</strong></p><p>Mã có hiệu lực trong 5 phút.</p>`
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error('Gửi mail lỗi:', e.message || e);
+    throw bad('Chưa gửi được email xác minh, vui lòng thử lại sau.', 502);
   }
-} else if (PROD) { 
-  console.error('Chế độ production cần SMTP_USER và SMTP_PASS để gửi mã xác minh.'); 
-  process.exit(1); 
-} else {
-  console.warn('[dev] Chưa cấu hình SMTP: mã xác minh chỉ được in ra console server, KHÔNG gửi email thật.');
 }
 
 // ---- làm sạch dữ liệu (chống XSS: giao diện render HTML thô nên server phải escape) ----
